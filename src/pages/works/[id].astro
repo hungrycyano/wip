@@ -44,7 +44,10 @@ const bgStyle = d.background ? `background-image: url("${withBase(d.background)}
 
     <aside class="work-meta" aria-label="作品の情報" set:html={metaHtml(d, chars)} />
 
-    <p class="back"><a href={withBase('/')}>← 一覧へ戻る</a></p>
+    <p class="back">
+      <a href={withBase('/')}>← 一覧へ戻る</a>
+      <a class="edit-link" href={withBase(`/edit/?open=${encodeURIComponent(work.id)}`)} data-edit-link hidden>編集画面で開く</a>
+    </p>
   </div>
 </Base>
 
@@ -53,4 +56,12 @@ const bgStyle = d.background ? `background-image: url("${withBase(d.background)}
   const scroller = document.querySelector<HTMLElement>('[data-reader-scroll]');
   const box = document.querySelector<HTMLElement>('[data-pos]');
   if (scroller && box) initPosition(scroller, box);
+
+  // 「編集画面で開く」は、このブラウザで編集画面を使ったことがあるパソコンでだけ出す（読む人には見えない）
+  try {
+    const link = document.querySelector<HTMLElement>('[data-edit-link]');
+    if (link && localStorage.getItem('wip.editor.used') && matchMedia('(min-width: 900px)').matches) link.hidden = false;
+  } catch {
+    /* 見えないままでよい */
+  }
 </script>
