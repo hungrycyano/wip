@@ -1,0 +1,49 @@
+---
+import site from '../config/site.json';
+import { withBase } from '../lib/paths';
+import '../styles/wip.css';
+
+interface Props {
+  title?: string;
+  description?: string;
+  noindex?: boolean;
+}
+const { title, description = site.description, noindex = false } = Astro.props;
+const pageTitle = title ? `${title} | ${site.title}` : site.title;
+---
+<!doctype html>
+<html lang={site.lang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{pageTitle}</title>
+    <meta name="description" content={description} />
+    {noindex && <meta name="robots" content="noindex, nofollow" />}
+    <meta name="theme-color" content="#f6f1e7" />
+    <link rel="icon" href={withBase('/favicon.svg')} type="image/svg+xml" />
+    <!-- 表示設定を描画前に反映して、ちらつきを防ぐ（中身は src/scripts/reader-settings.ts と同じキー） -->
+    <script is:inline>
+      try {
+        var s = JSON.parse(localStorage.getItem('wip.reader.v1') || '{}');
+        var r = document.documentElement;
+        if (s.mode === 'vertical') r.dataset.writing = 'vertical';
+        if (s.fontSize) r.style.setProperty('--fs', s.fontSize + 'px');
+        if (s.lineHeight) r.style.setProperty('--lh', String(s.lineHeight));
+        if (s.chars) r.style.setProperty('--chars', String(s.chars));
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <a class="skip" href="#main">本文へ移動</a>
+    <header class="site-header">
+      <a class="site-title" href={withBase('/')}>{site.title}</a>
+      <slot name="header" />
+    </header>
+    <main id="main">
+      <slot />
+    </main>
+    <footer class="site-footer">
+      <p>{site.title}</p>
+    </footer>
+  </body>
+</html>
