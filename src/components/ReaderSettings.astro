@@ -1,0 +1,36 @@
+---
+// 表示設定パネル（読む画面・編集画面で共通）。動きは src/scripts/reader-settings.ts
+interface Props {
+  open?: boolean;
+}
+const { open = false } = Astro.props;
+---
+<details class="settings" data-settings open={open}>
+  <summary>表示設定</summary>
+  <div class="settings-grid">
+    <div class="setting">
+      <span class="setting-name" id="set-mode-name">書く向き</span>
+      <div class="segmented" role="group" aria-labelledby="set-mode-name">
+        <button type="button" data-mode-btn="horizontal" aria-pressed="true">横書き</button>
+        <button type="button" data-mode-btn="vertical" aria-pressed="false">縦書き</button>
+      </div>
+    </div>
+    <div class="setting">
+      <label for="set-fs">文字の大きさ <output for="set-fs" data-out="fontSize"></output></label>
+      <input id="set-fs" type="range" min="14" max="30" step="1" data-key="fontSize" />
+    </div>
+    <div class="setting">
+      <label for="set-lh">行間 <output for="set-lh" data-out="lineHeight"></output></label>
+      <input id="set-lh" type="range" min="1.4" max="2.6" step="0.1" data-key="lineHeight" />
+    </div>
+    <div class="setting">
+      <label for="set-chars">1行の文字数 <output for="set-chars" data-out="chars"></output></label>
+      <input id="set-chars" type="range" min="10" max="60" step="1" data-key="chars" />
+    </div>
+    <button type="button" class="settings-reset" data-reset>はじめの設定に戻す</button>
+  </div>
+</details>
+<script>
+  import { initSettingsPanels } from '../scripts/reader-settings';
+  initSettingsPanels();
+</script>

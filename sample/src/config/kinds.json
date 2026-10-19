@@ -1,0 +1,9 @@
+{
+  "kinds": [
+    { "id": "short", "label": "短文" },
+    { "id": "prose", "label": "散文" },
+    { "id": "poem", "label": "詩", "keepLineBreaks": true },
+    { "id": "novel", "label": "長編" },
+    { "id": "folktale", "label": "民話" }
+  ]
+}
