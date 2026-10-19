@@ -1,0 +1,40 @@
+---
+// 章分けした長編の、1章分のページ（/works/<作品ID>/01/）
+import Base from '../../../layouts/Base.astro';
+import WorkReader from '../../../components/WorkReader.astro';
+import { chapterSlug, getChapters, getPublishedWorks, isFolderWork, type Chapter, type Work } from '../../../lib/works';
+import { bodyChars, chapterArticleHtml, chapterMetaHtml, chapterNavHtml } from '../../../lib/parts';
+import { workUrl } from '../../../lib/paths';
+
+export async function getStaticPaths() {
+  const works = (await getPublishedWorks()).filter(isFolderWork);
+  const paths = [];
+  for (const work of works) {
+    const chapters = await getChapters(work.id);
+    chapters.forEach((chapter, i) => {
+      paths.push({ params: { id: work.id, chapter: chapterSlug(chapter) }, props: { work, chapters, index: i } });
+    });
+  }
+  return paths;
+}
+
+const { work, chapters, index } = Astro.props as { work: Work; chapters: Chapter[]; index: number };
+const w = work.data;
+const c = chapters[index];
+const base = workUrl(work.id);
+const link = (ch?: Chapter) => ch && { url: `${base}${chapterSlug(ch)}/`, title: ch.data.title };
+const body = c.body ?? '';
+const article = chapterArticleHtml({ workTitle: w.title, title: c.data.title, kind: w.kind, no: index + 1 }, body);
+---
+<Base title={`${c.data.title}｜${w.title}`} description={w.summary}>
+  <WorkReader
+    article={article}
+    searchTitle={`${w.title}　${c.data.title}`}
+    background={c.data.background ?? w.background}
+    audio={c.data.audio}
+    editId={c.id}
+  >
+    <Fragment set:html={chapterNavHtml({ prev: link(chapters[index - 1]), next: link(chapters[index + 1]), toc: base })} />
+    <aside class="work-meta" aria-label="作品の情報" set:html={chapterMetaHtml(w, index + 1, chapters.length, bodyChars(w, body))} />
+  </WorkReader>
+</Base>

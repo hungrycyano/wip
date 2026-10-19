@@ -3,9 +3,14 @@
 // 下書きごとに新しく保存された方を残す。
 import type { WorkFields } from '../../lib/frontmatter';
 
+/** single：1ファイルの作品／index：章分けした長編の index.md／chapter：長編の章 */
+export type DraftType = 'single' | 'index' | 'chapter';
+
 export interface Draft {
   key: string; // ブラウザ内での識別用（ファイル名とは別）
-  id: string; // 作品ID＝書き出すファイル名（拡張子なし）
+  id: string; // 作品ID（章のときは章のファイル名。例：01）
+  type?: DraftType; // 書いていないものは single
+  work?: string; // 章のとき、属する長編の作品ID
   fields: WorkFields;
   body: string;
   createdAt: number;

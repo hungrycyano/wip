@@ -40,6 +40,14 @@ export function initFinder() {
   let hits: Map<string, string> | null = null;
   let seq = 0;
 
+  // 章分けした長編は、章のページ（/works/<ID>/01/）に当たっても作品のカードを出す
+  const hitFor = (card: HTMLElement): string | undefined => {
+    if (!hits) return undefined;
+    const url = norm(card.dataset.url!);
+    for (const [u, excerpt] of hits) if (u === url || u.startsWith(url)) return excerpt;
+    return undefined;
+  };
+
   const value = (name: string) =>
     form.querySelector<HTMLInputElement>(`input[name="${name}"]:checked`)?.value ?? '';
 
@@ -54,11 +62,11 @@ export function initFinder() {
         (!status || card.dataset.status === status) &&
         (!kind || card.dataset.kind === kind) &&
         (!tag || tags.includes(tag)) &&
-        (!hits || hits.has(norm(card.dataset.url!)));
+        (!hits || hitFor(card) !== undefined);
       card.hidden = !ok;
       const ex = card.querySelector<HTMLElement>('[data-excerpt]');
       if (ex) {
-        const html = hits?.get(norm(card.dataset.url!));
+        const html = hitFor(card);
         ex.hidden = !html;
         ex.innerHTML = html ? `…${html}…` : '';
       }

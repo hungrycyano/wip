@@ -3,11 +3,10 @@ import { glob } from 'astro/loaders';
 import { KIND_IDS } from './lib/kinds';
 import { STATUS_VALUES } from './lib/statuses';
 
-// 作品：src/works/<作品ID>.md（1作品＝1ファイル）。
-// 長編の章分け（src/works/<作品ID>/01.md …）は第3段階で別に読み込む予定なので、
-// ここでは直下の .md だけを対象にしている。
+// 作品：src/works/<作品ID>.md（1作品＝1ファイル）
+// 章分けした長編：src/works/<作品ID>/index.md（作品の情報と、まえがき）＋ 01.md, 02.md …（章）
 const works = defineCollection({
-  loader: glob({ pattern: '*.md', base: './src/works' }),
+  loader: glob({ pattern: ['*.md', '*/index.md'], base: './src/works' }),
   schema: z.object({
     title: z.string().min(1, 'title（作品名）を書いてください'),
     summary: z.string().default(''),
@@ -32,4 +31,15 @@ const works = defineCollection({
   }),
 });
 
-export const collections = { works };
+// 長編の章：src/works/<作品ID>/01.md など（index.md 以外）。先頭情報は章の題名だけでよい
+const chapters = defineCollection({
+  loader: glob({ pattern: ['*/*.md', '!*/index.md'], base: './src/works' }),
+  schema: z.object({
+    title: z.string().min(1, 'title（章の題名）を書いてください'),
+    draft: z.boolean().default(false),
+    background: z.string().optional(),
+    audio: z.string().optional(),
+  }),
+});
+
+export const collections = { works, chapters };
