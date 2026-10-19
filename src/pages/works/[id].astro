@@ -37,6 +37,7 @@ const bgStyle = d.background ? `background-image: url("${withBase(d.background)}
       <div class="pos" data-pos hidden>
         <label for="pos-range" class="visually-hidden">読んでいる位置</label>
         <input id="pos-range" type="range" min="0" max="1000" step="10" value="0" />
+        <span class="pos-bar" aria-hidden="true"><span></span></span>
         <output for="pos-range" aria-hidden="true">0%</output>
       </div>
     </div>

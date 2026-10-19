@@ -1,5 +1,5 @@
 // 長文の位置スライダー。
-// 横書き：ページを上下にスクロール（スライダーは画面右端で上下）。
+// 横書き：ページを上下にスクロール（スライダーは画面右端で上下。スマホでは上端の細い線と％だけ）。
 // 縦書き：本文の枠を左右にスクロール（スライダーは右が冒頭、左が末尾）。
 // 縦書きの scrollLeft はブラウザによって符号が違うので、「冒頭＝0、末尾＝1」にそろえて扱う。
 import { SETTINGS_EVENT } from './reader-settings';
@@ -67,6 +67,7 @@ export function initPosition(scroller: HTMLElement, box: HTMLElement) {
     const pct = `${Math.round(p * 100)}%`;
     input.setAttribute('aria-valuetext', `${pct}（${isVertical() ? '右が冒頭' : '上が冒頭'}）`);
     if (out) out.textContent = pct;
+    box.style.setProperty('--p', String(p));
   };
 
   const refresh = (keep: number | null) => {

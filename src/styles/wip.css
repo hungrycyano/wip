@@ -696,14 +696,47 @@ a.tag:hover {
   font-size: 0.9rem;
 }
 
+/* 進み具合の線（スマホの横書きだけで使う） */
+.pos-bar {
+  display: none;
+}
+
+/* スマホの横書き：スライダーの代わりに、画面上端に細い進み具合の線と％を出す（指でスクロールして読む） */
 @media (max-width: 600px) {
   :root:not([data-writing="vertical"]) .pos {
-    right: 0.15rem;
-    height: 40vh;
-    padding: 0.4rem 0.2rem;
+    top: 0;
+    left: 0;
+    right: 0;
+    transform: none;
+    height: auto;
+    flex-direction: row;
+    gap: 0.5rem;
+    padding: 0.3rem 0.75rem;
+    border-radius: 0;
+    background: rgba(246, 241, 231, 0.92);
+    pointer-events: none;
   }
-  :root:not([data-writing="vertical"]) .reader {
-    padding-right: 1.6rem;
+  :root:not([data-writing="vertical"]) .pos input[type="range"] {
+    display: none;
+  }
+  :root:not([data-writing="vertical"]) .pos-bar {
+    display: block;
+    flex: 1;
+    height: 3px;
+    background: var(--line);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  :root:not([data-writing="vertical"]) .pos-bar > span {
+    display: block;
+    height: 100%;
+    width: calc(var(--p, 0) * 100%);
+    background: var(--ink);
+  }
+  :root:not([data-writing="vertical"]) .pos output {
+    min-width: 2.6em;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
   }
 }
 
