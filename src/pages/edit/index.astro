@@ -1,0 +1,179 @@
+---
+// 編集画面（パソコン専用）。公開サイトのどこからもリンクしない。検索索引にも入れない。
+// ※ これは鍵ではありません。URLを知っていれば誰でも開けますが、
+//   下書きの保存先はその人のブラウザなので、公開サイトの内容は書き換えられません。
+import fs from 'node:fs';
+import path from 'node:path';
+import Base from '../../layouts/Base.astro';
+import ReaderSettings from '../../components/ReaderSettings.astro';
+import { getPublishedWorks } from '../../lib/works';
+import { KINDS } from '../../lib/kinds';
+import { STATUSES } from '../../lib/statuses';
+
+// 「サイトの作品を開く」用に、公開中の作品ファイルをそのまま埋め込む
+const works = await getPublishedWorks();
+const siteWorks = works.map((w) => ({
+  id: w.id,
+  title: w.data.title,
+  raw: w.filePath ? fs.readFileSync(path.resolve(w.filePath), 'utf8') : '',
+}));
+const siteWorksJson = JSON.stringify(siteWorks).replace(/</g, '\\u003c');
+---
+<Base title="編集" noindex bodyClass="edit-mode">
+  <div class="edit-mobile" data-pagefind-ignore="all">
+    <p>編集画面はパソコン専用です。パソコンのブラウザで開いてください。</p>
+  </div>
+
+  <div class="editor-app" data-editor data-pagefind-ignore="all">
+    <div class="ed-toolbar">
+      <div class="ed-row">
+        <label class="ed-inline">
+          <span>下書き</span>
+          <select data-draft-select aria-label="下書きを選ぶ"></select>
+        </label>
+        <button type="button" data-act="new">新規</button>
+        <button type="button" data-act="delete" class="ed-quiet">この下書きを削除</button>
+        <span class="ed-sep" aria-hidden="true"></span>
+        <label class="ed-inline">
+          <span>サイトの作品を開く</span>
+          <select data-site-select>
+            <option value="">選ぶ…</option>
+            {siteWorks.map((w) => <option value={w.id}>{w.title}（{w.id}）</option>)}
+          </select>
+        </label>
+        <label class="ed-file-btn">
+          <input type="file" accept=".md,.markdown,text/markdown,text/plain" data-import />
+          <span>ファイルを読み込む</span>
+        </label>
+      </div>
+      <div class="ed-row">
+        <div class="segmented" role="group" aria-label="画面の分け方">
+          <button type="button" data-view-btn="split" aria-pressed="true">本文＋プレビュー</button>
+          <button type="button" data-view-btn="editor" aria-pressed="false">本文だけ</button>
+          <button type="button" data-view-btn="preview" aria-pressed="false">プレビューだけ</button>
+        </div>
+        <label class="ed-file-btn">
+          <input type="file" accept="image/*,application/pdf,text/*,.md,audio/*" data-ref-input />
+          <span>参考を開く</span>
+        </label>
+        <span class="ed-sep" aria-hidden="true"></span>
+        <p class="ed-status" aria-live="polite">
+          <span data-saved>まだ保存していません</span>
+          <span class="ed-dirty" data-dirty hidden>● まだ書き出していない変更あり</span>
+        </p>
+        <span class="ed-spacer"></span>
+        <label class="ed-inline ed-check">
+          <input type="checkbox" data-touch-updated checked />
+          <span>書き出すとき更新日を今日にする</span>
+        </label>
+        <button type="button" data-act="export" class="ed-primary">書き出し（.md）</button>
+      </div>
+      <p class="ed-banner" data-banner hidden>
+        <span data-banner-text></span>
+        <button type="button" data-act="export">今すぐ書き出す</button>
+      </p>
+      <p class="ed-message" data-message role="status" hidden></p>
+    </div>
+
+    <div class="ed-main" data-main data-view="split">
+      <section class="ed-pane ed-edit" aria-label="本文の編集">
+        <details class="ed-fields" open>
+          <summary>作品の情報</summary>
+          <div class="ed-grid">
+            <label class="ed-field ed-wide">
+              <span>題名</span>
+              <input type="text" data-f="title" />
+            </label>
+            <label class="ed-field">
+              <span>作品ID（ファイル名）</span>
+              <input type="text" data-id placeholder="例：asa-no-koppu" spellcheck="false" autocomplete="off" />
+              <small data-id-note>半角英小文字・数字・ハイフン。公開URLになります。</small>
+            </label>
+            <label class="ed-field ed-wide">
+              <span>説明（一覧に出す1〜2文）</span>
+              <input type="text" data-f="summary" />
+            </label>
+            <label class="ed-field">
+              <span>種類</span>
+              <select data-f="kind">
+                {KINDS.map((k) => <option value={k.id}>{k.label}</option>)}
+              </select>
+            </label>
+            <label class="ed-field">
+              <span>状態</span>
+              <select data-f="status">
+                {STATUSES.map((s) => <option value={s.value}>{s.value}</option>)}
+              </select>
+            </label>
+            <label class="ed-field">
+              <span>タグ（「、」か「,」で区切る）</span>
+              <input type="text" data-f="tags" placeholder="例：夜、海" />
+            </label>
+            <label class="ed-field">
+              <span>書きはじめ</span>
+              <input type="date" data-f="created" />
+            </label>
+            <label class="ed-field">
+              <span>最終更新</span>
+              <input type="date" data-f="updated" />
+            </label>
+            <label class="ed-field ed-check">
+              <input type="checkbox" data-f="draft" />
+              <span>公開しない（draft）</span>
+            </label>
+          </div>
+          <details class="ed-sub">
+            <summary>素材のパス（省略可）</summary>
+            <div class="ed-grid">
+              <label class="ed-field ed-wide"><span>サムネイル</span><input type="text" data-f="thumbnail" placeholder="/assets/作品ID/thumb.jpg" /></label>
+              <label class="ed-field ed-wide"><span>背景</span><input type="text" data-f="background" placeholder="/assets/作品ID/bg.jpg" /></label>
+              <label class="ed-field ed-wide"><span>音声</span><input type="text" data-f="audio" placeholder="/assets/作品ID/reading.mp3" /></label>
+            </div>
+            <p class="ed-hint">素材のファイルは、リポジトリの <code>public/assets/作品ID/</code> に置いてください。</p>
+          </details>
+          <div class="ed-log">
+            <div class="ed-log-head">
+              <span>更新メモ（新しいものが上）</span>
+              <button type="button" data-act="add-log">＋今日のメモ</button>
+            </div>
+            <ol data-log></ol>
+          </div>
+        </details>
+        <label class="visually-hidden" for="ed-body">本文</label>
+        <textarea id="ed-body" class="ed-body" data-body spellcheck="false" placeholder="ここに本文を書きます。空行で段落が分かれます。"></textarea>
+        <p class="ed-count" data-count>本文 0字</p>
+      </section>
+
+      <section class="ed-pane ed-preview" aria-label="プレビュー">
+        <div class="ed-preview-tools">
+          <ReaderSettings />
+        </div>
+        <div class="work-page" data-preview-page>
+          <div class="work-audio" data-preview-audio hidden></div>
+          <div class="reader">
+            <div class="reader-scroll">
+              <article class="work" data-preview-article></article>
+            </div>
+          </div>
+          <aside class="work-meta" aria-label="作品の情報" data-preview-meta></aside>
+        </div>
+      </section>
+
+      <section class="ed-pane ed-ref" aria-label="参考" data-ref hidden>
+        <div class="ed-ref-head">
+          <span class="ed-ref-name" data-ref-name></span>
+          <span class="ed-ref-note">このブラウザの中だけで表示しています（保存・送信はしません）</span>
+          <button type="button" class="ed-close" data-act="close-ref" aria-label="参考を閉じる">✕</button>
+        </div>
+        <div class="ed-ref-body" data-ref-body></div>
+      </section>
+    </div>
+  </div>
+
+  <script type="application/json" id="site-works" set:html={siteWorksJson} />
+</Base>
+
+<script>
+  import { initEditor } from '../../scripts/editor/main';
+  initEditor();
+</script>

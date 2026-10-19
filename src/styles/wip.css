@@ -745,3 +745,418 @@ a.tag:hover {
     scroll-behavior: auto;
   }
 }
+
+/* ---------- 編集画面（パソコン専用） ---------- */
+
+.edit-mode {
+  height: 100dvh;
+  overflow: hidden;
+}
+.edit-mode .site-header {
+  padding-block: 0.4rem;
+}
+.edit-mode .site-title {
+  font-size: 1.1rem;
+}
+.edit-mode .site-footer {
+  display: none;
+}
+.edit-mode main {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.edit-mobile {
+  display: none;
+  padding: 3rem 1.5rem;
+  text-align: center;
+}
+@media (max-width: 899px) {
+  .edit-mobile {
+    display: block;
+  }
+  .editor-app {
+    display: none !important;
+  }
+  .edit-mode {
+    height: auto;
+    overflow: auto;
+  }
+}
+
+.editor-app {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--sans);
+  font-size: 0.9rem;
+}
+
+.ed-toolbar {
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper-deep);
+  display: grid;
+  gap: 0.4rem;
+}
+.ed-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.7rem;
+}
+.ed-sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--line);
+}
+.ed-spacer {
+  flex: 1;
+}
+.ed-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.editor-app button,
+.ed-file-btn span,
+.editor-app select {
+  font: inherit;
+  color: var(--ink);
+  background: #fffdf8;
+  border: 1px solid #a99c87;
+  border-radius: 4px;
+  padding: 0.25rem 0.7rem;
+  cursor: pointer;
+}
+.editor-app select {
+  max-width: 18rem;
+}
+.editor-app button:hover,
+.ed-file-btn:hover span {
+  background: #fff;
+}
+.editor-app .segmented button {
+  border: 0;
+  border-radius: 0;
+}
+.editor-app .segmented button + button {
+  border-left: 1px solid #a99c87;
+}
+.editor-app .segmented button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--paper);
+}
+.editor-app .ed-primary {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+.editor-app .ed-primary:hover {
+  background: #4a423b;
+}
+.editor-app .ed-quiet {
+  background: none;
+  border-color: transparent;
+  color: var(--muted);
+  text-decoration: underline;
+  padding-inline: 0.3rem;
+}
+.ed-file-btn {
+  position: relative;
+}
+.ed-file-btn input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+}
+.ed-file-btn:focus-within span {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.ed-status {
+  margin: 0;
+  color: var(--muted);
+  display: flex;
+  gap: 0.8rem;
+}
+.ed-dirty {
+  color: #8a3b12;
+}
+.ed-dirty[hidden] {
+  display: none;
+}
+
+.ed-banner {
+  margin: 0;
+  padding: 0.4rem 0.8rem;
+  background: #fbf1d0;
+  border: 1px solid #8c6a12;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+.ed-banner[hidden],
+.ed-message[hidden] {
+  display: none;
+}
+.ed-message {
+  margin: 0;
+  padding: 0.3rem 0.8rem;
+  background: #e2ece0;
+  border-radius: 4px;
+}
+.ed-message.ed-error {
+  background: #f6dcd5;
+}
+.ed-error {
+  color: #9b2c13;
+}
+
+/* 画面の分け方 */
+.ed-main {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.ed-main[data-view="editor"],
+.ed-main[data-view="preview"] {
+  grid-template-columns: 1fr;
+}
+.ed-main[data-view="editor"] .ed-preview,
+.ed-main[data-view="preview"] .ed-edit,
+.ed-main[data-view="ref"] .ed-preview {
+  display: none;
+}
+.ed-pane {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+.ed-pane[hidden] {
+  display: none;
+}
+.ed-edit {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--line);
+  padding: 0.8rem 1rem;
+  gap: 0.6rem;
+}
+.ed-main[data-view="editor"] .ed-edit {
+  max-width: 56rem;
+  width: 100%;
+  margin: 0 auto;
+  border-right: 0;
+}
+
+.ed-fields {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.3rem 0.8rem 0.6rem;
+  background: #fbf8f1;
+  flex-shrink: 0;
+}
+.ed-fields > summary,
+.ed-sub > summary {
+  cursor: pointer;
+  padding: 0.3rem 0;
+}
+.ed-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: 0.5rem 0.8rem;
+  margin: 0.3rem 0 0.5rem;
+}
+.ed-field {
+  display: grid;
+  gap: 0.15rem;
+  align-content: start;
+}
+.ed-field.ed-wide {
+  grid-column: 1 / -1;
+}
+.ed-field > span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.ed-field small {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.ed-field small.ed-error {
+  color: #9b2c13;
+}
+.ed-field.ed-check,
+.ed-inline.ed-check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.ed-check > span {
+  color: var(--ink);
+  font-size: 0.85rem;
+}
+.editor-app input[type="text"],
+.editor-app input[type="date"] {
+  font: inherit;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid #a99c87;
+  border-radius: 4px;
+  background: #fffdf8;
+  color: var(--ink);
+  min-width: 0;
+}
+.ed-hint {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.ed-log-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-top: 0.3rem;
+}
+.ed-log ol {
+  list-style: none;
+  margin: 0.3rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+.ed-log li {
+  display: grid;
+  grid-template-columns: 9.5rem 1fr auto;
+  gap: 0.4rem;
+}
+
+.ed-body {
+  flex: 1;
+  min-height: 16rem;
+  resize: none;
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.9;
+  padding: 0.8rem 1rem;
+  border: 1px solid #a99c87;
+  border-radius: 6px;
+  background: #fffdf8;
+  color: var(--ink);
+}
+.ed-count {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-align: right;
+}
+
+/* プレビュー：公開ページと同じ .work-page / .reader / .work をそのまま使う */
+.ed-preview {
+  background: var(--paper);
+}
+.ed-preview-tools {
+  padding: 0.8rem 1rem 0;
+  max-width: 46rem;
+  margin: 0 auto;
+}
+.ed-preview .work-page {
+  background-attachment: scroll;
+  padding-bottom: 2rem;
+}
+.ed-preview .work-meta {
+  font-family: var(--serif);
+  font-size: 0.9rem;
+}
+:root[data-writing="vertical"] .ed-preview .reader-scroll {
+  --cap: calc(100dvh - 17rem);
+}
+
+/* 参考パネル */
+.ed-ref {
+  display: flex;
+  flex-direction: column;
+  background: #fbf8f1;
+}
+.ed-ref-head {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.5rem 0.8rem;
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  background: #fbf8f1;
+}
+.ed-ref-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ed-ref-note {
+  color: var(--muted);
+  font-size: 0.75rem;
+  flex: 1;
+}
+.editor-app .ed-close {
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.3rem 0.55rem;
+}
+.ed-ref-body {
+  flex: 1;
+  min-height: 0;
+  padding: 0.8rem;
+  display: flex;
+  flex-direction: column;
+}
+.ed-ref-body img {
+  max-width: 100%;
+  height: auto;
+  align-self: center;
+}
+.ed-ref-body iframe {
+  flex: 1;
+  width: 100%;
+  min-height: 60vh;
+  border: 0;
+  background: #fff;
+}
+.ed-ref-body pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--serif);
+  font-size: 0.95rem;
+  line-height: 1.8;
+  margin: 0;
+}
+.ed-ref-body audio {
+  width: 100%;
+}
+
+.back {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.edit-link[hidden] {
+  display: none;
+}
+.editor-app .settings-reset {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+}
