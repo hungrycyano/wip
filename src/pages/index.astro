@@ -1,14 +1,21 @@
 ---
 import Base from '../layouts/Base.astro';
 import site from '../config/site.json';
-import { getPublishedWorks } from '../lib/works';
-import { KINDS, kindLabel } from '../lib/kinds';
-import { STATUSES, statusKey } from '../lib/statuses';
-import { statusLabelHtml, tagListHtml } from '../lib/parts';
-import { formatDate } from '../lib/render';
+import { getChapters, getPublishedWorks, isFolderWork } from '../lib/works';
+import { KINDS } from '../lib/kinds';
+import { STATUSES } from '../lib/statuses';
+import { cardHtml } from '../lib/parts';
 import { withBase, workUrl } from '../lib/paths';
 
 const works = await getPublishedWorks();
+const cards = await Promise.all(
+  works.map(async (w) => {
+    const url = workUrl(w.id);
+    const chapters = isFolderWork(w) ? (await getChapters(w.id)).length : 0;
+    const thumbSrc = w.data.thumbnail ? withBase(w.data.thumbnail) : undefined;
+    return { w, url, html: cardHtml({ url, data: w.data, thumbSrc, chapters }) };
+  }),
+);
 const tags = [...new Set(works.flatMap((w) => w.data.tags))].sort((a, b) => a.localeCompare(b, 'ja'));
 const usedKinds = KINDS.filter((k) => works.some((w) => w.data.kind === k.id));
 ---
@@ -55,32 +62,9 @@ const usedKinds = KINDS.filter((k) => works.some((w) => w.data.kind === k.id));
     <p class="result-count" aria-live="polite" data-count>{works.length}件</p>
 
     <ul class="work-list" data-list>
-      {works.map((w) => {
-        const d = w.data;
-        const url = workUrl(w.id);
-        return (
-          <li class="work-card" data-url={url} data-status={d.status} data-kind={d.kind} data-tags={JSON.stringify(d.tags)}>
-            <a class="thumb" href={url} tabindex="-1" aria-hidden="true">
-              {d.thumbnail ? (
-                <img src={withBase(d.thumbnail)} alt="" loading="lazy" decoding="async" />
-              ) : (
-                <span class:list={['thumb', 'thumb-fallback', `status-${statusKey(d.status)}`]}>{kindLabel(d.kind)}</span>
-              )}
-            </a>
-            <div class="card-body">
-              <h2 class="card-title"><a href={url}>{d.title}</a></h2>
-              {d.summary && <p class="card-summary">{d.summary}</p>}
-              <div class="card-meta">
-                <Fragment set:html={statusLabelHtml(d.status)} />
-                <span class="kind">{kindLabel(d.kind)}</span>
-                <span class="date">最終更新 <time datetime={formatDate(d.updated)}>{formatDate(d.updated)}</time></span>
-              </div>
-              <Fragment set:html={tagListHtml(d.tags)} />
-              <p class="search-excerpt" data-excerpt hidden></p>
-            </div>
-          </li>
-        );
-      })}
+      {cards.map(({ w, url, html }) => (
+        <li class="work-card" data-url={url} data-status={w.data.status} data-kind={w.data.kind} data-tags={JSON.stringify(w.data.tags)} set:html={html} />
+      ))}
     </ul>
     <p class="empty" data-empty hidden>当てはまる作品がありません。</p>
     {works.length === 0 && <p class="empty">まだ作品がありません。</p>}

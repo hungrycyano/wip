@@ -54,10 +54,13 @@ function toDateString(v: unknown): string {
 const str = (v: unknown) => (v == null ? '' : String(v));
 
 /** Markdownファイルを、先頭情報と本文に分ける。先頭情報が読めないときは例外を投げる */
-export function parseWorkFile(text: string, defaults: WorkFields): { fields: WorkFields; body: string } {
+export function parseWorkFile(
+  text: string,
+  defaults: WorkFields,
+): { fields: WorkFields; body: string; looksLikeChapter: boolean } {
   const src = text.replace(/^﻿/, '').replace(/\r\n?/g, '\n');
   const m = /^---\n([\s\S]*?)\n---[ \t]*(?:\n|$)/.exec(src);
-  if (!m) return { fields: { ...defaults }, body: src };
+  if (!m) return { fields: { ...defaults }, body: src, looksLikeChapter: false };
   const raw = (load(m[1]) ?? {}) as Record<string, unknown>;
   if (typeof raw !== 'object' || Array.isArray(raw)) throw new Error('先頭情報の形が正しくありません');
   const tags = Array.isArray(raw.tags) ? raw.tags.map(str) : raw.tags ? [str(raw.tags)] : [];
@@ -83,6 +86,8 @@ export function parseWorkFile(text: string, defaults: WorkFields): { fields: Wor
       log,
     },
     body: src.slice(m[0].length).replace(/^\n+/, ''),
+    // 長編の章のファイルは、種類と状態を書かない（作品の index.md に書く）
+    looksLikeChapter: raw.kind == null && raw.status == null,
   };
 }
 
@@ -116,6 +121,16 @@ export function serializeWork(f: WorkFields, body: string): string {
     lines.push('log:');
     for (const l of log) lines.push(`  - date: ${l.date || today()}`, `    note: ${q(l.note)}`);
   }
+  lines.push('---', '');
+  return `${lines.join('\n')}\n${body.replace(/\s+$/, '')}\n`;
+}
+
+/** 長編の章のファイル（src/works/<作品ID>/01.md など）にする。先頭情報は章の題名と、使っているときだけ素材・draft */
+export function serializeChapter(f: WorkFields, body: string): string {
+  const lines = ['---', `title: ${q(f.title)}`];
+  if (f.background) lines.push(`background: ${q(f.background)}`);
+  if (f.audio) lines.push(`audio: ${q(f.audio)}`);
+  if (f.draft) lines.push('draft: true');
   lines.push('---', '');
   return `${lines.join('\n')}\n${body.replace(/\s+$/, '')}\n`;
 }

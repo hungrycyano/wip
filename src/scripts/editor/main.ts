@@ -4,12 +4,29 @@
 // - 読み込み：Markdownファイル、またはサイトの作品から開く
 // - プレビューは公開ページと同じ部品（lib/parts.ts）と同じCSSで作る
 // - 参考パネル：選んだファイルをこのブラウザ内だけで表示（保存・送信しない）
+// - 素材：手元の画像・音声をプレビューに映して確認（保存・送信しない）
+// - 章分けした長編：index.md（作品の情報）と、章のファイル（01.md など）を別の下書きとして書く
 import { KIND_IDS } from '../../lib/kinds';
 import { STATUS_VALUES } from '../../lib/statuses';
-import { articleHtml, bodyChars, metaHtml } from '../../lib/parts';
+import {
+  articleHtml,
+  bodyChars,
+  cardHtml,
+  chapterArticleHtml,
+  chapterMetaHtml,
+  metaHtml,
+  tocHtml,
+} from '../../lib/parts';
 import { withBase } from '../../lib/paths';
-import { emptyFields, parseWorkFile, serializeWork, today, type WorkFields } from '../../lib/frontmatter';
-import { STORE_KEY, loadStore, mergeFromDisk, newKey, saveStore, type Draft } from './store';
+import {
+  emptyFields,
+  parseWorkFile,
+  serializeChapter,
+  serializeWork,
+  today,
+  type WorkFields,
+} from '../../lib/frontmatter';
+import { STORE_KEY, loadStore, mergeFromDisk, newKey, saveStore, type Draft, type DraftType } from './store';
 
 const SAVE_DELAY = 600;
 /** 最後に書き出してから（または書きはじめてから）この時間が過ぎたら、書き出しを促す */
@@ -17,6 +34,20 @@ const REMIND_AFTER = 60 * 60 * 1000;
 const ID_PATTERN = /^[a-z0-9][a-z0-9_-]*$/;
 
 type View = 'split' | 'editor' | 'preview';
+type AssetSlot = 'thumbnail' | 'background' | 'audio';
+
+interface SiteEntry {
+  path: string; // 作品ID、または 作品ID/01
+  title: string;
+  kind: string;
+  type: DraftType;
+  work?: string;
+  raw: string;
+}
+
+const typeOf = (d: Draft): DraftType => d.type ?? 'single';
+/** サイト上の場所（作品ID、章なら 作品ID/01） */
+const pathOf = (d: Draft) => (typeOf(d) === 'chapter' ? `${d.work ?? ''}/${d.id}` : d.id);
 
 const $ = <T extends Element = HTMLElement>(sel: string, root: ParentNode = document) => root.querySelector<T>(sel)!;
 const $$ = <T extends Element = HTMLElement>(sel: string, root: ParentNode = document) => [
@@ -39,9 +70,7 @@ export function initEditor() {
   if (!app) return;
 
   const store = loadStore();
-  const siteWorks: { id: string; title: string; raw: string }[] = JSON.parse(
-    document.getElementById('site-works')?.textContent || '[]',
-  );
+  const siteWorks: SiteEntry[] = JSON.parse(document.getElementById('site-works')?.textContent || '[]');
 
   const els = {
     draftSelect: $<HTMLSelectElement>('[data-draft-select]', app),
@@ -56,6 +85,14 @@ export function initEditor() {
     message: $('[data-message]', app),
     main: $('[data-main]', app),
     id: $<HTMLInputElement>('[data-id]', app),
+    type: $<HTMLSelectElement>('[data-draft-type]', app),
+    work: $<HTMLInputElement>('[data-work]', app),
+    fields: $<HTMLDetailsElement>('.ed-fields', app),
+    idLabel: $('[data-id-label]', app),
+    titleLabel: $('[data-title-label]', app),
+    card: $('[data-preview-card]', app),
+    cardWrap: $('[data-card-preview]', app),
+    prevAfter: $('[data-preview-after]', app),
     idNote: $('[data-id-note]', app),
     log: $('[data-log]', app),
     body: $<HTMLTextAreaElement>('[data-body]', app),
@@ -75,12 +112,25 @@ export function initEditor() {
   let saveTimer = 0;
   let view: View = 'split';
   let refUrl: string | null = null;
+  /** 「手元のファイルで確認」で選んだ素材（このページを開いている間だけ） */
+  const localAssets: Partial<Record<AssetSlot, { url: string; name: string }>> = {};
 
   // ---------- 下書きの作成・切り替え ----------
 
-  function makeDraft(fields: WorkFields, body: string, id = ''): Draft {
+  function makeDraft(fields: WorkFields, body: string, id = '', type: DraftType = 'single', work?: string): Draft {
     const now = Date.now();
-    const d: Draft = { key: newKey(), id, fields, body, createdAt: now, savedAt: now, exportedAt: null, dirty: true };
+    const d: Draft = {
+      key: newKey(),
+      id,
+      type,
+      work,
+      fields,
+      body,
+      createdAt: now,
+      savedAt: now,
+      exportedAt: null,
+      dirty: true,
+    };
     store.drafts[d.key] = d;
     return d;
   }
@@ -97,7 +147,8 @@ export function initEditor() {
       const o = document.createElement('option');
       o.value = d.key;
       const name = d.fields.title || '（題名なし）';
-      o.textContent = `${d.dirty ? '● ' : ''}${name}${d.id ? `（${d.id}）` : ''}`;
+      const where = pathOf(d).replace(/^\/|\/$/g, '');
+      o.textContent = `${d.dirty ? '● ' : ''}${typeOf(d) === 'chapter' ? '章：' : ''}${name}${where ? `（${where}）` : ''}`;
       els.draftSelect.append(o);
     }
     els.draftSelect.value = cur.key;
@@ -105,6 +156,7 @@ export function initEditor() {
 
   function switchTo(d: Draft) {
     flushSave();
+    clearLocalAssets();
     cur = d;
     store.current = d.key;
     fillForm();
@@ -139,9 +191,23 @@ export function initEditor() {
     field<HTMLInputElement>('tags').value = f.tags.join('、');
     field<HTMLInputElement>('draft').checked = f.draft;
     els.id.value = cur.id;
+    els.type.value = typeOf(cur);
+    els.work.value = cur.work ?? '';
     els.body.value = cur.body;
     renderLog();
+    applyType();
     checkId();
+  }
+
+  /** 形式に合わせて、入力欄と見出しを切りかえる */
+  function applyType() {
+    const t = typeOf(cur);
+    els.fields.dataset.type = t;
+    els.idLabel.textContent =
+      t === 'chapter' ? '章のファイル名（例：01）' : t === 'index' ? '作品ID（フォルダ名）' : '作品ID（ファイル名）';
+    els.id.placeholder = t === 'chapter' ? '01' : '例：asa-no-koppu';
+    els.titleLabel.textContent = t === 'chapter' ? '章の題名' : '題名';
+    els.cardWrap.hidden = t === 'chapter';
   }
 
   function readForm() {
@@ -159,6 +225,8 @@ export function initEditor() {
     f.audio = v('audio').trim();
     f.draft = field<HTMLInputElement>('draft').checked;
     cur.id = els.id.value.trim();
+    cur.type = els.type.value as DraftType;
+    cur.work = typeOf(cur) === 'chapter' ? els.work.value.trim() : undefined;
     cur.body = els.body.value;
   }
 
@@ -190,29 +258,99 @@ export function initEditor() {
     });
   }
 
+  /** 書き出すファイル名と、リポジトリで置く場所 */
+  function exportTarget(): { file: string; place: string } {
+    const t = typeOf(cur);
+    if (t === 'index') return { file: 'index.md', place: `src/works/${cur.id}/index.md` };
+    if (t === 'chapter') return { file: `${cur.id}.md`, place: `src/works/${cur.work}/${cur.id}.md` };
+    return { file: `${cur.id}.md`, place: `src/works/${cur.id}.md` };
+  }
+
   function checkId(): boolean {
-    const ok = ID_PATTERN.test(cur.id);
-    els.idNote.textContent = !cur.id
-      ? '半角英小文字・数字・ハイフン。公開URLになります。'
-      : ok
-        ? `書き出すファイル名：${cur.id}.md`
-        : '使えるのは半角英小文字・数字・ハイフン・下線だけです（先頭は英数字）。';
+    const t = typeOf(cur);
+    const ok = ID_PATTERN.test(cur.id) && (t !== 'chapter' || ID_PATTERN.test(cur.work ?? ''));
+    els.idNote.textContent =
+      !cur.id || (t === 'chapter' && !cur.work)
+        ? t === 'chapter'
+          ? '長編の作品IDと、章のファイル名（01, 02 …）を決めてください。番号の順に並びます。'
+          : '半角英小文字・数字・ハイフン。公開URLになります。'
+        : ok
+          ? `置く場所：${exportTarget().place}`
+          : '使えるのは半角英小文字・数字・ハイフン・下線だけです（先頭は英数字）。';
     els.idNote.classList.toggle('ed-error', !!cur.id && !ok);
     return ok;
   }
 
   // ---------- プレビュー（公開ページと同じ部品） ----------
 
+  /** 素材のURL。手元のファイルを選んでいればそちらを優先する */
+  function assetUrl(slot: AssetSlot): string | undefined {
+    const local = localAssets[slot];
+    if (local) return local.url;
+    const p = cur.fields[slot];
+    return p ? withBase(p) : undefined;
+  }
+
+  /** 長編（作品ID）の情報：まず下書き、なければサイトの作品から */
+  function workInfo(id: string): WorkFields | undefined {
+    const draft = Object.values(store.drafts).find((d) => typeOf(d) === 'index' && d.id === id);
+    if (draft) return draft.fields;
+    const site = siteWorks.find((s) => s.type === 'index' && s.path === id);
+    return site && parseWorkFile(site.raw, defaults()).fields;
+  }
+
+  /** サイトに公開中の、その長編の章（目次のプレビュー用） */
+  function siteChapters(id: string) {
+    return siteWorks
+      .filter((s) => s.type === 'chapter' && s.work === id)
+      .map((s) => {
+        const body = parseWorkFile(s.raw, defaults()).body;
+        return { url: '#', title: s.title, chars: bodyChars({ kind: s.kind }, body) };
+      });
+  }
+
   function renderPreview() {
     const f = cur.fields;
-    els.prevArticle.innerHTML = articleHtml(f, cur.body);
-    els.prevMeta.innerHTML = metaHtml(f, bodyChars(f, cur.body));
-    els.count.textContent = `本文 ${bodyChars(f, cur.body).toLocaleString('ja-JP')}字`;
-    els.prevPage.classList.toggle('has-bg', !!f.background);
-    els.prevPage.style.backgroundImage = f.background ? `url("${withBase(f.background)}")` : '';
+    const t = typeOf(cur);
+    let chars = bodyChars(f, cur.body);
+    els.prevAfter.innerHTML = '';
+    if (t === 'chapter') {
+      const w = cur.work ? workInfo(cur.work) : undefined;
+      const kind = w?.kind ?? f.kind;
+      chars = bodyChars({ kind }, cur.body);
+      // 何章目か：公開中の章と、この章のファイル名を、ファイル名の順に並べて数える（公開ページと同じ）
+      const names = new Set(
+        siteWorks.filter((s) => s.type === 'chapter' && s.work === cur.work).map((s) => s.path.split('/')[1]),
+      );
+      if (cur.id) names.add(cur.id);
+      const order = [...names].sort((a, b) => a.localeCompare(b, 'ja', { numeric: true }));
+      const no = cur.id ? order.indexOf(cur.id) + 1 : undefined;
+      els.prevArticle.innerHTML = chapterArticleHtml(
+        { workTitle: w?.title || '（長編の題名）', title: f.title, kind, no },
+        cur.body,
+      );
+      els.prevMeta.innerHTML =
+        w && no
+          ? chapterMetaHtml(w, no, order.length, chars)
+          : `<div class="meta-line"><span class="chars">この章 ${chars.toLocaleString('ja-JP')}字</span></div>`;
+    } else {
+      els.prevArticle.innerHTML = articleHtml(f, cur.body);
+      const toc = t === 'index' ? siteChapters(cur.id) : [];
+      if (toc.length) {
+        els.prevAfter.innerHTML =
+          `<div class="toc-wrap">${tocHtml(toc)}<p class="ed-hint">目次は、いま公開中の章です。</p></div>`;
+      }
+      const total = chars + toc.reduce((n, c) => n + c.chars, 0);
+      els.prevMeta.innerHTML = metaHtml(f, total, { chapters: toc.length });
+      els.card.innerHTML = cardHtml({ url: '#', data: f, thumbSrc: assetUrl('thumbnail'), chapters: toc.length });
+    }
+    els.count.textContent = `本文 ${chars.toLocaleString('ja-JP')}字`;
+    const bg = assetUrl('background');
+    els.prevPage.classList.toggle('has-bg', !!bg);
+    els.prevPage.style.backgroundImage = bg ? `url("${bg}")` : '';
     const audio = els.prevAudio.querySelector('audio');
-    if (f.audio) {
-      const src = withBase(f.audio);
+    const src = assetUrl('audio');
+    if (src) {
       if (!audio || audio.getAttribute('src') !== src) {
         els.prevAudio.innerHTML = `<audio controls preload="none"></audio>`;
         els.prevAudio.querySelector('audio')!.setAttribute('src', src);
@@ -222,6 +360,36 @@ export function initEditor() {
       els.prevAudio.hidden = true;
       els.prevAudio.innerHTML = '';
     }
+  }
+
+  // ---------- 素材（手元のファイルで確認） ----------
+
+  function setLocalAsset(slot: AssetSlot, file: File) {
+    const old = localAssets[slot];
+    if (old) URL.revokeObjectURL(old.url);
+    localAssets[slot] = { url: URL.createObjectURL(file), name: file.name };
+    // パスが空なら、公開するときのパスを入れておく
+    const input = field<HTMLInputElement>(slot);
+    const folder = (typeOf(cur) === 'chapter' ? cur.work : cur.id) || '作品ID';
+    const suggested = `/assets/${folder}/${file.name}`;
+    if (!input.value.trim()) {
+      input.value = suggested;
+      readForm();
+      changed();
+    }
+    if (slot === 'thumbnail') (els.cardWrap as HTMLDetailsElement).open = true;
+    const note = $(`[data-local-note="${slot}"]`, app);
+    note.hidden = false;
+    note.textContent = `いまは手元の「${file.name}」を映しています（保存していません）。公開するときは public${input.value.trim() || suggested} に置いてください。`;
+    renderPreview();
+  }
+
+  function clearLocalAssets() {
+    for (const slot of Object.keys(localAssets) as AssetSlot[]) {
+      URL.revokeObjectURL(localAssets[slot]!.url);
+      delete localAssets[slot];
+    }
+    $$('[data-local-note]', app).forEach((n) => (n.hidden = true));
   }
 
   // プレビュー内のリンクで画面を移動しない
@@ -317,20 +485,26 @@ export function initEditor() {
       return;
     }
     if (!checkId()) {
-      showMessage('作品ID（ファイル名）を、半角英小文字・数字・ハイフンで決めてください。', true);
-      els.id.focus();
+      showMessage(
+        typeOf(cur) === 'chapter'
+          ? '長編の作品IDと章のファイル名を、半角英小文字・数字・ハイフンで決めてください。'
+          : '作品ID（ファイル名）を、半角英小文字・数字・ハイフンで決めてください。',
+        true,
+      );
+      (typeOf(cur) === 'chapter' && !ID_PATTERN.test(cur.work ?? '') ? els.work : els.id).focus();
       return;
     }
-    if (els.touchUpdated.checked) {
+    if (els.touchUpdated.checked && typeOf(cur) !== 'chapter') {
       cur.fields.updated = today();
       field<HTMLInputElement>('updated').value = cur.fields.updated;
     }
-    const text = serializeWork(cur.fields, cur.body);
+    const target = exportTarget();
+    const text = typeOf(cur) === 'chapter' ? serializeChapter(cur.fields, cur.body) : serializeWork(cur.fields, cur.body);
     const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${cur.id}.md`;
+    a.download = target.file;
     document.body.append(a);
     a.click();
     a.remove();
@@ -341,11 +515,18 @@ export function initEditor() {
     renderPreview();
     saveNow();
     renderDraftSelect();
-    showMessage(`「${cur.id}.md」を書き出しました。公開するには、リポジトリの src/works/ に置いてください。`);
+    const local = Object.values(localAssets).length ? ' 確認に使った素材のファイルも public/assets/ に置くのを忘れずに。' : '';
+    showMessage(`「${target.file}」を書き出しました。公開するには、リポジトリの ${target.place} に置いてください。${local}`);
   }
 
   /** ファイルの中身を下書きとして開く。同じ作品IDの下書きがあれば、置きかえるか聞く（quiet のときは聞かずに置きかえる） */
-  function openText(text: string, id: string, source: string, quiet = false) {
+  function openText(
+    text: string,
+    id: string,
+    source: string,
+    quiet = false,
+    hint: { type?: DraftType; work?: string } = {},
+  ) {
     let parsed;
     try {
       parsed = parseWorkFile(text, defaults());
@@ -353,14 +534,17 @@ export function initEditor() {
       showMessage(`${source}の先頭情報を読めませんでした：${(e as Error).message}`, true);
       return;
     }
-    const same = Object.values(store.drafts).find((d) => d.id === id);
+    const type: DraftType = hint.type ?? (parsed.looksLikeChapter ? 'chapter' : 'single');
+    const work = type === 'chapter' ? hint.work ?? '' : undefined;
+    const path = type === 'chapter' ? `${work}/${id}` : id;
+    const same = id ? Object.values(store.drafts).find((d) => typeOf(d) === type && pathOf(d) === path) : undefined;
     if (same) {
       // 書き出していない変更がなければ、聞かずに置きかえる（中身は書き出し済みなので失われない）
       const overwrite =
         quiet ||
         !same.dirty ||
         window.confirm(
-          `作品ID「${id}」の下書きに、まだ書き出していない変更があります。\n\n` +
+          `「${path}」の下書きに、まだ書き出していない変更があります。\n\n` +
             `OK：${source}の内容で置きかえる（書き出していない変更は消えます）\n` +
             `キャンセル：今の下書きを残し、${source}は別の下書きとして開く`,
         );
@@ -375,7 +559,7 @@ export function initEditor() {
         return;
       }
     }
-    const d = makeDraft(parsed.fields, parsed.body, id);
+    const d = makeDraft(parsed.fields, parsed.body, id, type, work);
     // サイトやファイルと同じ内容なので、まだ「書き出していない変更」はない
     d.dirty = false;
     d.exportedAt = Date.now();
@@ -385,14 +569,37 @@ export function initEditor() {
 
   // 種類が kinds.json にないときは、その警告を残す
   function openedMessage(source: string) {
-    if (KIND_IDS.includes(cur.fields.kind)) showMessage(`${source}から開きました。`);
+    if (typeOf(cur) === 'chapter') {
+      showMessage(
+        cur.work
+          ? `${source}から、長編「${cur.work}」の章として開きました。`
+          : `${source}を長編の章として開きました。「長編の作品ID」を入れてください。`,
+      );
+    } else if (KIND_IDS.includes(cur.fields.kind)) showMessage(`${source}から開きました。`);
   }
 
-  function openSiteWork(id: string, quiet = false): boolean {
-    const w = siteWorks.find((s) => s.id === id);
+  function openSiteWork(path: string, quiet = false): boolean {
+    const w = siteWorks.find((s) => s.path === path);
     if (!w) return false;
-    openText(w.raw, w.id, 'サイトの作品', quiet);
+    const id = w.type === 'chapter' ? w.path.slice(w.path.indexOf('/') + 1) : w.path;
+    openText(w.raw, id, 'サイトの作品', quiet, { type: w.type, work: w.work });
     return true;
+  }
+
+  /** 新しい章：今の下書きの長編を引きつぎ、次の番号を入れておく */
+  function newChapter() {
+    const work = typeOf(cur) === 'chapter' ? cur.work ?? '' : typeOf(cur) === 'index' ? cur.id : '';
+    const used = [
+      ...siteWorks.filter((s) => s.type === 'chapter' && s.work === work).map((s) => s.path.split('/')[1]),
+      ...Object.values(store.drafts)
+        .filter((d) => typeOf(d) === 'chapter' && d.work === work)
+        .map((d) => d.id),
+    ];
+    const max = used.reduce((m, id) => Math.max(m, Number(id) || 0), 0);
+    const fields = defaults();
+    if (work) fields.kind = workInfo(work)?.kind ?? fields.kind;
+    switchTo(makeDraft(fields, '', work ? pad(max + 1) : '', 'chapter', work));
+    field('title').focus();
   }
 
   // ---------- 画面の分け方・参考パネル ----------
@@ -461,9 +668,9 @@ export function initEditor() {
   app.addEventListener('input', (e) => {
     const t = e.target as HTMLElement;
     if (t.closest('[data-log]') || t.closest('[data-settings]')) return;
-    if (t.matches('[data-f], [data-id], [data-body]')) {
+    if (t.matches('[data-f], [data-id], [data-work], [data-body]')) {
       readForm();
-      if (t.matches('[data-id]')) checkId();
+      if (t.matches('[data-id], [data-work]')) checkId();
       changed();
     }
   });
@@ -473,6 +680,16 @@ export function initEditor() {
     if (t.matches('select[data-f], input[type="checkbox"][data-f], input[type="date"][data-f]')) {
       readForm();
       changed();
+    } else if (t.matches('[data-draft-type]')) {
+      readForm();
+      applyType();
+      checkId();
+      changed();
+    } else if (t.matches('[data-local]')) {
+      const input = t as HTMLInputElement;
+      const file = input.files?.[0];
+      input.value = '';
+      if (file) setLocalAsset(input.dataset.local as AssetSlot, file);
     }
   });
 
@@ -492,7 +709,9 @@ export function initEditor() {
     els.importInput.value = '';
     if (!file) return;
     const id = file.name.replace(/\.(md|markdown|txt)$/i, '');
-    openText(await file.text(), ID_PATTERN.test(id) ? id : '', `ファイル「${file.name}」`);
+    // index.md は章分けした長編の作品の情報（作品IDはフォルダ名なので、あとで入れてもらう）
+    const hint = id === 'index' ? { type: 'index' as const } : {};
+    openText(await file.text(), id !== 'index' && ID_PATTERN.test(id) ? id : '', `ファイル「${file.name}」`, false, hint);
   });
 
   els.refInput.addEventListener('change', () => {
@@ -509,6 +728,9 @@ export function initEditor() {
       case 'new':
         switchTo(makeDraft(defaults(), ''));
         field('title').focus();
+        break;
+      case 'new-chapter':
+        newChapter();
         break;
       case 'delete': {
         const name = cur.fields.title || '（題名なし）';
@@ -581,7 +803,8 @@ export function initEditor() {
 
   if (openId) {
     history.replaceState(null, '', location.pathname);
-    const same = Object.values(store.drafts).find((d) => d.id === openId);
+    const siteType = siteWorks.find((s) => s.path === openId)?.type;
+    const same = Object.values(store.drafts).find((d) => pathOf(d) === openId && (!siteType || typeOf(d) === siteType));
     if (same && same.dirty) {
       switchTo(same);
       showMessage(`「${openId}」には書き出していない下書きがあるので、そちらを開きました。サイトの版から開き直すには「サイトの作品を開く」を使ってください。`);

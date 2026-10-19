@@ -1,0 +1,66 @@
+---
+// 作品ページ・章ページの読む部分（表示設定、音声、本文、位置スライダー）。
+// 本文のHTMLは lib/parts.ts で作り、編集画面のプレビューと同じものを使う。
+import ReaderSettings from './ReaderSettings.astro';
+import { withBase } from '../lib/paths';
+
+interface Props {
+  /** 本文（題名を含む）のHTML */
+  article: string;
+  /** 検索結果に出す題名 */
+  searchTitle: string;
+  background?: string;
+  audio?: string;
+  /** 「編集画面で開く」で開く作品ID（章なら 作品ID/01） */
+  editId: string;
+}
+const { article, searchTitle, background, audio, editId } = Astro.props;
+const bgStyle = background ? `background-image: url("${withBase(background)}")` : undefined;
+---
+<div class:list={['work-page', { 'has-bg': background }]} style={bgStyle}>
+  <div class="reader-tools">
+    <ReaderSettings />
+  </div>
+
+  {audio && (
+    <div class="work-audio">
+      <audio controls preload="none" src={withBase(audio)}>
+        お使いのブラウザでは音声を再生できません。
+      </audio>
+    </div>
+  )}
+
+  <div class="reader">
+    <div class="reader-scroll" data-reader-scroll>
+      <article class="work" data-pagefind-body data-pagefind-meta={`title:${searchTitle}`} set:html={article} />
+    </div>
+    <div class="pos" data-pos hidden>
+      <label for="pos-range" class="visually-hidden">読んでいる位置</label>
+      <input id="pos-range" type="range" min="0" max="1000" step="10" value="0" />
+      <span class="pos-bar" aria-hidden="true"><span></span></span>
+      <output for="pos-range" aria-hidden="true">0%</output>
+    </div>
+  </div>
+
+  <slot />
+
+  <p class="back">
+    <a href={withBase('/')}>← 一覧へ戻る</a>
+    <a class="edit-link" href={withBase(`/edit/?open=${encodeURIComponent(editId)}`)} data-edit-link hidden>編集画面で開く</a>
+  </p>
+</div>
+
+<script>
+  import { initPosition } from '../scripts/position';
+  const scroller = document.querySelector<HTMLElement>('[data-reader-scroll]');
+  const box = document.querySelector<HTMLElement>('[data-pos]');
+  if (scroller && box) initPosition(scroller, box);
+
+  // 「編集画面で開く」は、このブラウザで編集画面を使ったことがあるパソコンでだけ出す（読む人には見えない）
+  try {
+    const link = document.querySelector<HTMLElement>('[data-edit-link]');
+    if (link && localStorage.getItem('wip.editor.used') && matchMedia('(min-width: 900px)').matches) link.hidden = false;
+  } catch {
+    /* 見えないままでよい */
+  }
+</script>

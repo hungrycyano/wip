@@ -6,17 +6,29 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Base from '../../layouts/Base.astro';
 import ReaderSettings from '../../components/ReaderSettings.astro';
-import { getPublishedWorks } from '../../lib/works';
+import { chapterSlug, getChapters, getPublishedWorks, isFolderWork } from '../../lib/works';
 import { KINDS } from '../../lib/kinds';
 import { STATUSES } from '../../lib/statuses';
 
-// 「サイトの作品を開く」用に、公開中の作品ファイルをそのまま埋め込む
+// 「サイトの作品を開く」用に、公開中の作品ファイル（長編は章も）をそのまま埋め込む
+const read = (filePath?: string) => (filePath ? fs.readFileSync(path.resolve(filePath), 'utf8') : '');
 const works = await getPublishedWorks();
-const siteWorks = works.map((w) => ({
-  id: w.id,
-  title: w.data.title,
-  raw: w.filePath ? fs.readFileSync(path.resolve(w.filePath), 'utf8') : '',
-}));
+const siteWorks = [];
+for (const w of works) {
+  const folder = isFolderWork(w);
+  siteWorks.push({ path: w.id, title: w.data.title, kind: w.data.kind, type: folder ? 'index' : 'single', raw: read(w.filePath) });
+  if (!folder) continue;
+  for (const c of await getChapters(w.id)) {
+    siteWorks.push({
+      path: c.id,
+      title: c.data.title,
+      kind: w.data.kind,
+      type: 'chapter',
+      work: w.id,
+      raw: read(c.filePath),
+    });
+  }
+}
 const siteWorksJson = JSON.stringify(siteWorks).replace(/</g, '\\u003c');
 ---
 <Base title="編集" noindex bodyClass="edit-mode">
@@ -32,13 +44,18 @@ const siteWorksJson = JSON.stringify(siteWorks).replace(/</g, '\\u003c');
           <select data-draft-select aria-label="下書きを選ぶ"></select>
         </label>
         <button type="button" data-act="new">新規</button>
+        <button type="button" data-act="new-chapter">新規の章</button>
         <button type="button" data-act="delete" class="ed-quiet">この下書きを削除</button>
         <span class="ed-sep" aria-hidden="true"></span>
         <label class="ed-inline">
           <span>サイトの作品を開く</span>
           <select data-site-select>
             <option value="">選ぶ…</option>
-            {siteWorks.map((w) => <option value={w.id}>{w.title}（{w.id}）</option>)}
+            {siteWorks.map((w) => (
+              <option value={w.path}>
+                {w.type === 'chapter' ? `　└ ${w.title}（${w.path}）` : `${w.title}（${w.path}）`}
+              </option>
+            ))}
           </select>
         </label>
         <label class="ed-file-btn">
@@ -81,39 +98,51 @@ const siteWorksJson = JSON.stringify(siteWorks).replace(/</g, '\\u003c');
           <summary>作品の情報</summary>
           <div class="ed-grid">
             <label class="ed-field ed-wide">
-              <span>題名</span>
+              <span>形式</span>
+              <select data-draft-type>
+                <option value="single">1ファイルの作品（src/works/作品ID.md）</option>
+                <option value="index">章分けした長編の、作品の情報とまえがき（src/works/作品ID/index.md）</option>
+                <option value="chapter">長編の章（src/works/作品ID/01.md など）</option>
+              </select>
+            </label>
+            <label class="ed-field ed-wide">
+              <span data-title-label>題名</span>
               <input type="text" data-f="title" />
             </label>
+            <label class="ed-field" data-chapter-only>
+              <span>長編の作品ID（フォルダ名）</span>
+              <input type="text" data-work placeholder="例：toudaimori" spellcheck="false" autocomplete="off" />
+            </label>
             <label class="ed-field">
-              <span>作品ID（ファイル名）</span>
+              <span data-id-label>作品ID（ファイル名）</span>
               <input type="text" data-id placeholder="例：asa-no-koppu" spellcheck="false" autocomplete="off" />
               <small data-id-note>半角英小文字・数字・ハイフン。公開URLになります。</small>
             </label>
-            <label class="ed-field ed-wide">
+            <label class="ed-field ed-wide" data-work-only>
               <span>説明（一覧に出す1〜2文）</span>
               <input type="text" data-f="summary" />
             </label>
-            <label class="ed-field">
+            <label class="ed-field" data-work-only>
               <span>種類</span>
               <select data-f="kind">
                 {KINDS.map((k) => <option value={k.id}>{k.label}</option>)}
               </select>
             </label>
-            <label class="ed-field">
+            <label class="ed-field" data-work-only>
               <span>状態</span>
               <select data-f="status">
                 {STATUSES.map((s) => <option value={s.value}>{s.value}</option>)}
               </select>
             </label>
-            <label class="ed-field">
+            <label class="ed-field" data-work-only>
               <span>タグ（「、」か「,」で区切る）</span>
               <input type="text" data-f="tags" placeholder="例：夜、海" />
             </label>
-            <label class="ed-field">
+            <label class="ed-field" data-work-only>
               <span>書きはじめ</span>
               <input type="date" data-f="created" />
             </label>
-            <label class="ed-field">
+            <label class="ed-field" data-work-only>
               <span>最終更新</span>
               <input type="date" data-f="updated" />
             </label>
@@ -123,15 +152,32 @@ const siteWorksJson = JSON.stringify(siteWorks).replace(/</g, '\\u003c');
             </label>
           </div>
           <details class="ed-sub">
-            <summary>素材のパス（省略可）</summary>
-            <div class="ed-grid">
-              <label class="ed-field ed-wide"><span>サムネイル</span><input type="text" data-f="thumbnail" placeholder="/assets/作品ID/thumb.jpg" /></label>
-              <label class="ed-field ed-wide"><span>背景</span><input type="text" data-f="background" placeholder="/assets/作品ID/bg.jpg" /></label>
-              <label class="ed-field ed-wide"><span>音声</span><input type="text" data-f="audio" placeholder="/assets/作品ID/reading.mp3" /></label>
+            <summary>素材（サムネイル・背景・音声。省略可）</summary>
+            <div class="ed-assets">
+              {[
+                { slot: 'thumbnail', label: 'サムネイル（一覧用）', ph: '/assets/作品ID/thumb.jpg', accept: 'image/*', workOnly: true },
+                { slot: 'background', label: '背景', ph: '/assets/作品ID/bg.jpg', accept: 'image/*', workOnly: false },
+                { slot: 'audio', label: '音声（朗読）', ph: '/assets/作品ID/reading.mp3', accept: 'audio/*', workOnly: false },
+              ].map((a) => (
+                <div class="ed-asset" data-work-only={a.workOnly ? '' : undefined}>
+                  <label class="ed-field">
+                    <span>{a.label}のパス</span>
+                    <input type="text" data-f={a.slot} placeholder={a.ph} spellcheck="false" />
+                  </label>
+                  <label class="ed-file-btn">
+                    <input type="file" accept={a.accept} data-local={a.slot} />
+                    <span>手元のファイルで確認</span>
+                  </label>
+                  <small class="ed-local-note" data-local-note={a.slot} hidden></small>
+                </div>
+              ))}
             </div>
-            <p class="ed-hint">素材のファイルは、リポジトリの <code>public/assets/作品ID/</code> に置いてください。</p>
+            <p class="ed-hint">
+              「手元のファイルで確認」は、プレビューに映すだけです（保存も送信もしません）。
+              公開するときは、素材のファイルをリポジトリの <code>public/assets/作品ID/</code> に置き、パスを <code>/assets/作品ID/ファイル名</code> にしてください。
+            </p>
           </details>
-          <div class="ed-log">
+          <div class="ed-log" data-work-only>
             <div class="ed-log-head">
               <span>更新メモ（新しいものが上）</span>
               <button type="button" data-act="add-log">＋今日のメモ</button>
@@ -148,6 +194,10 @@ const siteWorksJson = JSON.stringify(siteWorks).replace(/</g, '\\u003c');
         <div class="ed-preview-tools">
           <ReaderSettings />
         </div>
+        <details class="ed-card-preview" data-card-preview>
+          <summary>一覧での見え方</summary>
+          <ul class="work-list"><li class="work-card" data-preview-card></li></ul>
+        </details>
         <div class="work-page" data-preview-page>
           <div class="work-audio" data-preview-audio hidden></div>
           <div class="reader">
@@ -155,6 +205,7 @@ const siteWorksJson = JSON.stringify(siteWorks).replace(/</g, '\\u003c');
               <article class="work" data-preview-article></article>
             </div>
           </div>
+          <div data-preview-after></div>
           <aside class="work-meta" aria-label="作品の情報" data-preview-meta></aside>
         </div>
       </section>

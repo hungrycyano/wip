@@ -6,6 +6,8 @@ status: ひとまず完成
 tags: [旅, 記憶]
 created: 2026-09-28
 updated: 2026-10-19
+thumbnail: /assets/test-prose/thumb.jpg
+background: /assets/test-prose/bg.jpg
 draft: false
 log:
   - date: 2026-10-19

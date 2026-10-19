@@ -6,6 +6,7 @@ status: 改稿中
 tags: [海, 夜]
 created: 2026-10-10
 updated: 2026-10-18
+audio: /assets/test-poem/reading.mp3
 draft: false
 log:
   - date: 2026-10-18
