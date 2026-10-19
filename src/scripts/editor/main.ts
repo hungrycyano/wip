@@ -355,11 +355,15 @@ export function initEditor() {
     }
     const same = Object.values(store.drafts).find((d) => d.id === id);
     if (same) {
-      const overwrite = quiet || window.confirm(
-        `作品ID「${id}」の下書きがすでにあります。\n\n` +
-          `OK：その下書きを、${source}の内容で置きかえる\n` +
-          `キャンセル：別の下書きとして開く`,
-      );
+      // 書き出していない変更がなければ、聞かずに置きかえる（中身は書き出し済みなので失われない）
+      const overwrite =
+        quiet ||
+        !same.dirty ||
+        window.confirm(
+          `作品ID「${id}」の下書きに、まだ書き出していない変更があります。\n\n` +
+            `OK：${source}の内容で置きかえる（書き出していない変更は消えます）\n` +
+            `キャンセル：今の下書きを残し、${source}は別の下書きとして開く`,
+        );
       if (overwrite) {
         same.fields = parsed.fields;
         same.body = parsed.body;
